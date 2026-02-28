@@ -1,0 +1,27 @@
+body {
+  background: #0d1117;
+  color: #eee;
+  font-family: monospace;
+  padding: 20px;
+}
+
+#chat {
+  height: 400px;
+  overflow-y: auto;
+  border: 1px solid #333;
+  padding: 10px;
+  background: #000;
+}
+
+.msg {
+  margin-bottom: 10px;
+  white-space: pre-wrap;
+}
+
+.user {
+  color: #58a6ff;
+}
+
+.system {
+  color: #7ee787;
+}
