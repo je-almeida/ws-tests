@@ -8,7 +8,7 @@ const wss = new WebSocketServer({ server });
 
 app.use(express.static("public"));
 
-const LOREM =
+const RESPONSE =
   "Lorem ipsum dolor sit amet consectetur adipiscing elit. ".repeat(5);
 
 wss.on("connection", (ws) => {
@@ -19,7 +19,7 @@ wss.on("connection", (ws) => {
 
     if (msg.role !== "user") return;
 
-    for (const char of LOREM) {
+    for (const char of RESPONSE) {
 
       if (ws.readyState !== ws.OPEN) return;
 

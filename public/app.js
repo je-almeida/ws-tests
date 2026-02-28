@@ -1,81 +1,146 @@
-const chat = document.getElementById("chat");
-const btn = document.getElementById("send");
-
-const ws = new WebSocket(`ws://${location.host}`);
-
-let currentSystemMsg = null;
+/* CONFIG */
+const qtde_janelas = 9; // 1..9
 
 const LOREM =
   "Lorem ipsum dolor sit amet consectetur adipiscing elit.";
 
-ws.onmessage = (e) => {
+const grid = document.getElementById("grid");
+const btn = document.getElementById("send");
 
-  const msg = JSON.parse(e.data);
+const sockets = [];
+const systemBuffers = [];
 
-  if (msg.role !== "system") return;
 
-  if (msg.type === "char") {
-    streamChar(msg.value);
+/* ==========================
+   INIT GRID
+========================== */
+
+for (let i = 0; i < 9; i++) {
+
+  const box = document.createElement("div");
+  box.className = "box";
+  box.id = "box-" + i;
+
+  grid.appendChild(box);
+
+  if (i < qtde_janelas) {
+    initSocket(i, box);
+  } else {
+    box.textContent = "INATIVO";
   }
+}
 
-  if (msg.type === "end") {
-    currentSystemMsg = null;
-  }
-};
+
+/* ==========================
+   SOCKET
+========================== */
+
+function initSocket(id, box) {
+
+  const ws = new WebSocket(`ws://${location.host}`);
+
+  sockets[id] = ws;
+  systemBuffers[id] = null;
+
+  ws.onmessage = (e) => {
+
+    const msg = JSON.parse(e.data);
+
+    if (msg.role !== "system") return;
+
+    if (msg.type === "char") {
+      streamChar(id, box, msg.value);
+    }
+
+    if (msg.type === "end") {
+      systemBuffers[id] = null;
+      autoSend(ws, box);
+    }
+  };
+
+  ws.onerror = () => {
+    box.textContent = "ERRO";
+  };
+}
+
+
+/* ==========================
+   SEND
+========================== */
 
 btn.onclick = () => {
 
-  render("user", LOREM);
+  sockets.forEach((ws, i) => {
+
+    if (ws?.readyState === WebSocket.OPEN) {
+      send(ws, i);
+    }
+  });
+};
+
+function send(ws, id) {
+
+  render(id, "user", LOREM);
 
   ws.send(JSON.stringify({
     role: "user",
     text: LOREM
   }));
-};
+}
 
+function autoSend(ws, box) {
 
-/* ===========================
-   STREAMING
-=========================== */
-
-function streamChar(char) {
-
-  if (!currentSystemMsg) {
-    currentSystemMsg = createMsg("system");
-  }
-
-  currentSystemMsg.textContent += char;
-
-  scroll();
+  setTimeout(() => {
+    if (ws.readyState === WebSocket.OPEN) {
+      send(ws);
+    }
+  }, 300);
 }
 
 
-/* ===========================
+/* ==========================
+   STREAMING
+========================== */
+
+function streamChar(id, box, char) {
+
+  if (!systemBuffers[id]) {
+    systemBuffers[id] = createMsg(box, "system");
+  }
+
+  systemBuffers[id].textContent += char;
+
+  scroll(box);
+}
+
+
+/* ==========================
    RENDER
-=========================== */
+========================== */
 
-function render(role, text) {
+function render(id, role, text) {
 
-  const div = createMsg(role);
+  const box = document.getElementById("box-" + id);
+
+  const div = createMsg(box, role);
 
   div.textContent += text;
 
-  scroll();
+  scroll(box);
 }
 
-function createMsg(role) {
+function createMsg(box, role) {
 
   const div = document.createElement("div");
 
   div.className = `msg ${role}`;
-
   div.textContent = `[${role}] `;
 
-  chat.appendChild(div);
+  box.appendChild(div);
 
   return div;
 }
 
-function scroll() {
-  chat.scrollTop = chat.scrollHeight;
+function scroll(box) {
+  box.scrollTop = box.scrollHeight;
 }
