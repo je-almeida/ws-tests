@@ -9,31 +9,38 @@ const wss = new WebSocketServer({ server });
 app.use(express.static("public"));
 
 const RESPONSE =
-  "Lorem ipsum dolor sit amet consectetur adipiscing elit. ".repeat(5);
+  "Lorem ipsum dolor sit amet consectetur adipiscing elit. ".repeat(6);
 
 wss.on("connection", (ws) => {
 
   ws.on("message", async (raw) => {
 
-    const msg = JSON.parse(raw.toString());
+    let msg;
+
+    try {
+      msg = JSON.parse(raw.toString());
+    } catch {
+      return;
+    }
 
     if (msg.role !== "user") return;
 
-    for (const char of RESPONSE) {
+    const prefix = `[ws-${msg.id ?? 0}] `;
+    const fullResponse = prefix + RESPONSE;
+
+    for (const char of fullResponse) {
 
       if (ws.readyState !== ws.OPEN) return;
 
       ws.send(JSON.stringify({
-        role: "system",
         type: "char",
         value: char
       }));
 
-      await sleep(15);
+      await sleep(12);
     }
 
     ws.send(JSON.stringify({
-      role: "system",
       type: "end"
     }));
   });

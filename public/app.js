@@ -1,60 +1,58 @@
 /* CONFIG */
-const qtde_janelas = 9; // 1..9
+const qtde_janelas = 1; // qualquer número, ex: 1, 9, 50, 200
 
 const LOREM =
   "Lorem ipsum dolor sit amet consectetur adipiscing elit.";
 
 const grid = document.getElementById("grid");
-const btn = document.getElementById("send");
+
+document.getElementById("titulo").textContent =
+  `WebSocket Streaming (${qtde_janelas} Conexões)`;
 
 const sockets = [];
-const systemBuffers = [];
+const buffers = [];
 
 
-/* ==========================
-   INIT GRID
-========================== */
+/* INIT GRID */
 
-for (let i = 0; i < 9; i++) {
+for (let i = 0; i < qtde_janelas; i++) {
 
   const box = document.createElement("div");
   box.className = "box";
   box.id = "box-" + i;
 
   grid.appendChild(box);
-
-  if (i < qtde_janelas) {
-    initSocket(i, box);
-  } else {
-    box.textContent = "INATIVO";
-  }
+  initSocket(i, box);
 }
 
 
-/* ==========================
-   SOCKET
-========================== */
+/* SOCKET */
 
 function initSocket(id, box) {
 
   const ws = new WebSocket(`ws://${location.host}`);
 
   sockets[id] = ws;
-  systemBuffers[id] = null;
+  buffers[id] = null;
+
+  ws.onopen = () => {
+    send(ws, id);
+  };
 
   ws.onmessage = (e) => {
 
     const msg = JSON.parse(e.data);
-
-    if (msg.role !== "system") return;
 
     if (msg.type === "char") {
       streamChar(id, box, msg.value);
     }
 
     if (msg.type === "end") {
-      systemBuffers[id] = null;
-      autoSend(ws, box);
+      buffers[id] = null;
+
+      setTimeout(() => {
+        send(ws, id);
+      }, 200);
     }
   };
 
@@ -64,19 +62,7 @@ function initSocket(id, box) {
 }
 
 
-/* ==========================
-   SEND
-========================== */
-
-btn.onclick = () => {
-
-  sockets.forEach((ws, i) => {
-
-    if (ws?.readyState === WebSocket.OPEN) {
-      send(ws, i);
-    }
-  });
-};
+/* SEND */
 
 function send(ws, id) {
 
@@ -84,39 +70,27 @@ function send(ws, id) {
 
   ws.send(JSON.stringify({
     role: "user",
+    id: id,
     text: LOREM
   }));
 }
 
-function autoSend(ws, box) {
 
-  setTimeout(() => {
-    if (ws.readyState === WebSocket.OPEN) {
-      send(ws);
-    }
-  }, 300);
-}
-
-
-/* ==========================
-   STREAMING
-========================== */
+/* STREAM */
 
 function streamChar(id, box, char) {
 
-  if (!systemBuffers[id]) {
-    systemBuffers[id] = createMsg(box, "system");
+  if (!buffers[id]) {
+    buffers[id] = createMsg(box, "system");
   }
 
-  systemBuffers[id].textContent += char;
+  buffers[id].textContent += char;
 
   scroll(box);
 }
 
 
-/* ==========================
-   RENDER
-========================== */
+/* RENDER */
 
 function render(id, role, text) {
 
