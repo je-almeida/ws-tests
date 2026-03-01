@@ -1,120 +1,124 @@
-/* CONFIG */
-const qtde_janelas = 90; // qualquer número, ex: 1, 9, 50, 200
+/* ─── CONFIG ─────────────────────────────────────────────────────────────── */
 
-const LOREM =
-  "Lorem ipsum dolor sit amet consectetur adipiscing elit.";
-
-const grid = document.getElementById("grid");
-
-document.getElementById("titulo").textContent =
-  `WebSocket Streaming (${qtde_janelas} Conexões)`;
-
-const sockets = [];
-const buffers = [];
+const CONFIG = {
+  qtde_janelas:     9,    // qualquer número: 1, 9, 50, 200...
+  lorem:            "Lorem ipsum dolor sit amet consectetur adipiscing elit.",
+  reconnectDelayMs: 200,
+};
 
 
-/* INIT GRID */
+/* ─── FACTORY: mensagens do protocolo ────────────────────────────────────── */
 
-for (let i = 0; i < qtde_janelas; i++) {
-
-  const box = document.createElement("div");
-  box.className = "box";
-  box.id = "box-" + i;
-
-  grid.appendChild(box);
-  initSocket(i, box);
-}
+const MessageFactory = {
+  user: (id, text) => JSON.stringify({ role: "user", id, text }),
+};
 
 
-/* SOCKET */
+/* ─── RENDERER (SRP) ─────────────────────────────────────────────────────── */
+// Responsabilidade única: manipular o DOM de uma caixa de chat.
 
-function initSocket(id, box) {
-
-  const ws = new WebSocket(`ws://${location.host}`);
-
-  sockets[id] = ws;
-  buffers[id] = null;
-
-  ws.onopen = () => {
-    send(ws, id);
-  };
-
-  ws.onmessage = (e) => {
-
-    const msg = JSON.parse(e.data);
-
-    if (msg.type === "char") {
-      streamChar(id, box, msg.value);
-    }
-
-    if (msg.type === "end") {
-      buffers[id] = null;
-
-      setTimeout(() => {
-        send(ws, id);
-      }, 200);
-    }
-  };
-
-  ws.onerror = () => {
-    box.textContent = "ERRO";
-  };
-}
-
-
-/* SEND */
-
-function send(ws, id) {
-
-  render(id, "user", LOREM);
-
-  ws.send(JSON.stringify({
-    role: "user",
-    id: id,
-    text: LOREM
-  }));
-}
-
-
-/* STREAM */
-
-function streamChar(id, box, char) {
-
-  if (!buffers[id]) {
-    buffers[id] = createMsg(box, "system");
+class ChatRenderer {
+  constructor(box) {
+    this._box    = box;
+    this._buffer = null;
   }
 
-  buffers[id].textContent += char;
+  renderUser(text) {
+    const div = this._createMsg("user");
+    div.textContent += text;
+    this._scroll();
+  }
 
-  scroll(box);
+  appendChar(char) {
+    if (!this._buffer) this._buffer = this._createMsg("system");
+    this._buffer.textContent += char;
+    this._scroll();
+  }
+
+  endStream() {
+    this._buffer = null;
+  }
+
+  _createMsg(role) {
+    const div = document.createElement("div");
+    div.className = `msg ${role}`;
+    div.textContent = `[${role}] `;
+    this._box.appendChild(div);
+    return div;
+  }
+
+  _scroll() {
+    this._box.scrollTop = this._box.scrollHeight;
+  }
 }
 
 
-/* RENDER */
+/* ─── SOCKET HANDLER (Observer) ──────────────────────────────────────────── */
+// Observa eventos do WebSocket e delega ao ChatRenderer.
 
-function render(id, role, text) {
+class SocketHandler {
+  constructor(id, renderer, config) {
+    this._id       = id;
+    this._renderer = renderer;
+    this._config   = config;
+    this._connect();
+  }
 
-  const box = document.getElementById("box-" + id);
+  _connect() {
+    this._ws           = new WebSocket(`ws://${location.host}`);
+    this._ws.onopen    = ()  => this._send();
+    this._ws.onmessage = (e) => this._onMessage(e);
+    this._ws.onerror   = ()  => this._renderer.renderUser("ERRO");
+  }
 
-  const div = createMsg(box, role);
+  _send() {
+    this._renderer.renderUser(this._config.lorem);
+    this._ws.send(MessageFactory.user(this._id, this._config.lorem));
+  }
 
-  div.textContent += text;
+  _onMessage(e) {
+    const msg = JSON.parse(e.data);
 
-  scroll(box);
+    if (msg.type === "char") this._renderer.appendChar(msg.value);
+
+    if (msg.type === "end") {
+      this._renderer.endStream();
+      setTimeout(() => this._send(), this._config.reconnectDelayMs);
+    }
+  }
 }
 
-function createMsg(box, role) {
 
-  const div = document.createElement("div");
+/* ─── GRID FACTORY (Factory) ─────────────────────────────────────────────── */
+// Cria N boxes no container e instancia um SocketHandler para cada um.
 
-  div.className = `msg ${role}`;
-  div.textContent = `[${role}] `;
+class GridFactory {
+  constructor(container, config) {
+    this._container = container;
+    this._config    = config;
+  }
 
-  box.appendChild(div);
+  build() {
+    for (let i = 0; i < this._config.qtde_janelas; i++) {
+      const box      = this._createBox(i);
+      const renderer = new ChatRenderer(box);
+      new SocketHandler(i, renderer, this._config);
+    }
+  }
 
-  return div;
+  _createBox(id) {
+    const box     = document.createElement("div");
+    box.className = "box";
+    box.id        = "box-" + id;
+    this._container.appendChild(box);
+    return box;
+  }
 }
 
-function scroll(box) {
-  box.scrollTop = box.scrollHeight;
-}
+
+/* ─── BOOTSTRAP ──────────────────────────────────────────────────────────── */
+
+document.getElementById("titulo").textContent =
+  `WebSocket Streaming (${CONFIG.qtde_janelas} Conexões)`;
+
+new GridFactory(document.getElementById("grid"), CONFIG).build();

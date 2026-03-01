@@ -2,56 +2,94 @@ import express from "express";
 import http from "http";
 import { WebSocketServer } from "ws";
 
-const app = express();
-const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
 
-app.use(express.static("public"));
+/* ─── CONFIG ─────────────────────────────────────────────────────────────── */
 
-const RESPONSE =
-  "Lorem ipsum dolor sit amet consectetur adipiscing elit. ".repeat(6);
+const CONFIG = {
+  port: 3000,
+  charDelayMs: 80,
+  response: "Lorem ipsum dolor sit amet consectetur adipiscing elit. ".repeat(6),
+};
 
-const CHAR_DELAY_MS = 0; // velocidade do stream: aumente para mais lento
 
-wss.on("connection", (ws) => {
+/* ─── STRATEGY: geração de texto ─────────────────────────────────────────── */
+// Troque por OpenAIStreamStrategy, AnthropicStreamStrategy, etc.
 
-  ws.on("message", async (raw) => {
+class LoremStreamStrategy {
+  constructor(text) {
+    this._text = text;
+  }
 
-    let msg;
-
-    try {
-      msg = JSON.parse(raw.toString());
-    } catch {
-      return;
+  /** @yields {string} um caractere por vez */
+  *generate(prefix) {
+    for (const char of prefix + this._text) {
+      yield char;
     }
+  }
+}
+
+
+/* ─── FACTORY: mensagens do protocolo ────────────────────────────────────── */
+
+const MessageFactory = {
+  char: (value) => JSON.stringify({ type: "char", value }),
+  end:  ()      => JSON.stringify({ type: "end" }),
+};
+
+
+/* ─── CONNECTION HANDLER (SRP + Observer) ────────────────────────────────── */
+
+class ConnectionHandler {
+  constructor(ws, strategy, config) {
+    this._ws       = ws;
+    this._strategy = strategy;
+    this._config   = config;
+
+    this._ws.on("message", (raw) => this._onMessage(raw));
+  }
+
+  _onMessage(raw) {
+    let msg;
+    try { msg = JSON.parse(raw.toString()); } catch { return; }
 
     if (msg.role !== "user") return;
 
-    const prefix = `[ws-${msg.id ?? 0}] `;
-    const fullResponse = prefix + RESPONSE;
+    this._stream(`[ws-${msg.id ?? 0}] `);
+  }
 
-    for (const char of fullResponse) {
-
-      if (ws.readyState !== ws.OPEN) return;
-
-      ws.send(JSON.stringify({
-        type: "char",
-        value: char
-      }));
-
-      await sleep(CHAR_DELAY_MS);
+  async _stream(prefix) {
+    for (const char of this._strategy.generate(prefix)) {
+      if (this._ws.readyState !== this._ws.OPEN) return;
+      this._ws.send(MessageFactory.char(char));
+      await sleep(this._config.charDelayMs);
     }
+    this._ws.send(MessageFactory.end());
+  }
+}
 
-    ws.send(JSON.stringify({
-      type: "end"
-    }));
+
+/* ─── BOOTSTRAP ──────────────────────────────────────────────────────────── */
+
+function createServer(config) {
+  const app      = express();
+  const server   = http.createServer(app);
+  const wss      = new WebSocketServer({ server });
+  const strategy = new LoremStreamStrategy(config.response);
+
+  app.use(express.static("public"));
+
+  wss.on("connection", (ws) => new ConnectionHandler(ws, strategy, config));
+
+  server.listen(config.port, () => {
+    console.log(`http://localhost:${config.port}`);
   });
-});
+}
+
+createServer(CONFIG);
+
+
+/* ─── UTIL ───────────────────────────────────────────────────────────────── */
 
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
-
-server.listen(3000, () => {
-  console.log("http://localhost:3000");
-});
