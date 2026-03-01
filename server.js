@@ -11,6 +11,8 @@ app.use(express.static("public"));
 const RESPONSE =
   "Lorem ipsum dolor sit amet consectetur adipiscing elit. ".repeat(6);
 
+const CHAR_DELAY_MS = 0; // velocidade do stream: aumente para mais lento
+
 wss.on("connection", (ws) => {
 
   ws.on("message", async (raw) => {
@@ -37,7 +39,7 @@ wss.on("connection", (ws) => {
         value: char
       }));
 
-      await sleep(12);
+      await sleep(CHAR_DELAY_MS);
     }
 
     ws.send(JSON.stringify({

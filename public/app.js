@@ -1,5 +1,5 @@
 /* CONFIG */
-const qtde_janelas = 1; // qualquer número, ex: 1, 9, 50, 200
+const qtde_janelas = 90; // qualquer número, ex: 1, 9, 50, 200
 
 const LOREM =
   "Lorem ipsum dolor sit amet consectetur adipiscing elit.";
